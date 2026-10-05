@@ -1,0 +1,60 @@
+name: Sync Kadma site
+
+on:
+  push:
+    paths:
+      - '.github/workflows/sync-kadma.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download current production site
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          curl -fsSL https://kadma-2026.vercel.app/ -o index.html
+          curl -fsSL https://kadma-2026.vercel.app/script.js -o script.js
+          curl -fsSL https://kadma-2026.vercel.app/styles1.css -o styles1.css
+          curl -fsSL https://kadma-2026.vercel.app/styles2.css -o styles2.css
+          curl -fsSL https://kadma-2026.vercel.app/styles3.css -o styles3.css
+          curl -fsSL https://kadma-2026.vercel.app/styles4.css -o styles4.css
+          curl -fsSL https://kadma-2026.vercel.app/assets/organizers-logos.webp -o assets/organizers-logos.webp
+          curl -fsSL https://kadma-2026.vercel.app/assets/qr-registration.png -o assets/qr-registration.png
+
+      - name: Update TED Nahariya topic only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("index.html")
+          s = p.read_text(encoding="utf-8")
+          old = "אפליקציית ניהול תורים בידיד מיצוי זכויות"
+          new = "פיתוח אפליקציית ניהול משימות למרכזי עוצמה"
+          count = s.count(old)
+          if count != 1:
+              raise SystemExit(f"Expected exactly 1 occurrence, found {count}")
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+      - name: Verify exact change
+        run: |
+          grep -Fq 'פיתוח אפליקציית ניהול משימות למרכזי עוצמה' index.html
+          if grep -Fq 'אפליקציית ניהול תורים בידיד מיצוי זכויות' index.html; then
+            echo "Old text still present" >&2
+            exit 1
+          fi
+          test -s assets/organizers-logos.webp
+          test -s assets/qr-registration.png
+
+      - name: Commit synced site
+        run: |
+          git config user.name "Kadma Site Sync"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html script.js styles1.css styles2.css styles3.css styles4.css assets/
+          git commit -m "Sync Kadma site and update TED Nahariya topic"
+          git push
